@@ -1,0 +1,32 @@
+main -> _ expr _
+
+expr
+    -> array
+    |  object
+    |  boolean
+    |  number
+    |  string
+    |  null
+
+object
+    -> "{" entry_list "}"
+
+entry_list
+    -> entry entry_list_rest
+
+entry_list_rest
+    -> "," entry_list
+    -> epsilon
+
+entry
+    -> string ":" expr
+
+array
+    -> "[" array_items "]"
+
+array_items
+    -> expr array_items_rest
+
+array_items_rest
+    -> "," array_items
+    -> epsilon

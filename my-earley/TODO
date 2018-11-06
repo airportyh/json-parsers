@@ -1,0 +1,3 @@
+* First loop through state set needs to account for additions to the set
+within the loop.
+* Add origin position to states. Fix algorithm.

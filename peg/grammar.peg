@@ -1,0 +1,44 @@
+start = _ expr _
+
+_ = [ \n]*
+
+expr
+    = array
+    / object
+    / boolean
+    / number
+    / string
+    / null
+
+object
+    = "{" _ entries:entry_list _ "}" { return entries }
+
+entry_list
+    = first:entry _ "," _ rest:entry_list { return { ...first, ...rest } }
+    / entry
+
+entry
+    = key:string _ ":" _ value:expr { return { [key]: value }}
+
+array
+    = "[" _ items:array_items _ "]" { return items }
+
+array_items
+    = first:array_item _ "," _ rest:array_items { return [first, ...rest] }
+    / item:array_item { return [item] }
+
+array_item
+    = expr
+
+boolean
+    = "true" { return true }
+    / "false" { return false }
+
+null
+    = "null" { return null }
+
+string
+    = '"' string:[a-zA-Z0-9]* '"' { return string.join("") }
+
+number
+    = digits:[0-9]+ { return Number(digits.join("")) }

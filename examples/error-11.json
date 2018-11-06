@@ -1,0 +1,12 @@
+[
+    {
+        "name": "Marty",
+        "age": 8,
+        "number": 9,
+    },
+    {
+        "name": "Linus",
+        "age": true,
+        "number": 11,
+    }
+]
