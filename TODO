@@ -1,0 +1,5 @@
+* make a Jison version to have an LR example
+* make own bottom-up parser?
+* improve lexer error output
+* implement FOLLOW and FIRST for predictive parser
+* do another recursive descent parser with better error output
