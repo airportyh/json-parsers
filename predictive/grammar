@@ -9,13 +9,13 @@ expr
     |  null
 
 object
-    -> "{" entry_list "}"
+    -> "{" object_entry_list "}"
 
-entry_list
+object_entry_list
     -> entry entry_list_rest
 
 entry_list_rest
-    -> "," entry_list
+    -> "," object_entry_list
     -> epsilon
 
 entry

@@ -1,0 +1,12 @@
+# Questions
+
+* What are the limitations of the predictive parser vs the Earley parser?
+What are the grammars it cannot parse, and is that important to me? 
+Answer: the grammar needs to have left recursion eliminated and be left factored.
+* How does an LR parser work? Does it have limitations in describing
+error messages?
+* How does the various parsers handle the dangling else problem?
+* ambiguous id problem: Page 202. How would the various parsers handle that?
+* left recursion: how do various parsers handle that?
+* what are the limitation in power of the various parsers? Which ones do I care
+about? Or do I want the most powerful one and sacrifice performance?

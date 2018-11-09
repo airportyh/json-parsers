@@ -1,5 +1,15 @@
-* make a Jison version to have an LR example
 * make own bottom-up parser?
 * improve lexer error output
-* implement FOLLOW and FIRST for predictive parser
 * do another recursive descent parser with better error output
+* build test suite to easily get overview
+
+## Error Message Strategies
+
+* imagine the expected tokens and see which one yields a longer parse,
+then suggest the better one to the user
+* reverse walk the tree to provide user more context
+
+## Longer Term
+
+* more languages: LISP, SQL, arithmetic, XML, a simplified JS or Python
+* Small subset of JS to compare with Acorn and Esprima in perf

@@ -297,17 +297,8 @@ function peg$parse(input, options) {
     if (peg$currPos > peg$maxFailPos) {
       peg$maxFailPos = peg$currPos;
       peg$maxFailExpected = [];
-      // console.log("Failed: Reseting", expected, peg$currPos, peg$maxFailPos);
-    } else {
-      if (58 === peg$currPos) {
-        try {
-          throw new Error("Fail");
-        } catch (e) {
-          console.log(e.stack);
-        }
-      }
-      // console.log("Failed: Appending", expected, peg$currPos, peg$maxFailPos);
     }
+
     peg$maxFailExpected.push(expected);
   }
 
@@ -816,7 +807,6 @@ function peg$parse(input, options) {
       peg$fail(peg$endExpectation());
     }
 
-    console.log("peg$maxFailExpected", peg$maxFailExpected);
     throw peg$buildStructuredError(
       peg$maxFailExpected,
       peg$maxFailPos < input.length ? input.charAt(peg$maxFailPos) : null,
