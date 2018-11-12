@@ -1,15 +1,14 @@
-* make own bottom-up parser?
-* improve lexer error output
-* do another recursive descent parser with better error output
-* build test suite to easily get overview
-
 ## Error Message Strategies
 
+* think of ways to provide the context in a more user-friendly way
+    * provide/generate examples for each of the rules
 * imagine the expected tokens and see which one yields a longer parse,
 then suggest the better one to the user
-* reverse walk the tree to provide user more context
+* improve lexer error output
+* build test suite to easily get overview
 
 ## Longer Term
 
+* make own bottom-up parser?
 * more languages: LISP, SQL, arithmetic, XML, a simplified JS or Python
 * Small subset of JS to compare with Acorn and Esprima in perf

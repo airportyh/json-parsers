@@ -45,12 +45,12 @@ module.exports = function createLexer() {
         WS:      { match: /[ \t\n]+/, lineBreaks: true },
         number:  /0|[1-9][0-9]*/,
         string:  /"(?:\\["\\]|[^\n"\\])*"/,
-        left_brace:  '{',
-        right_brace:  '}',
-        left_bracket: '[',
-        right_bracket: ']',
-        colon: ':',
-        comma: ',',
+        "{":  '{',
+        "}":  '}',
+        "[": '[',
+        "]": ']',
+        ":": ':',
+        ",": ',',
         keyword: ['true', 'false', 'null']
     }));
 }

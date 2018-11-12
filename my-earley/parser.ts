@@ -29,8 +29,8 @@ type GrammarRule = {
 type Grammar = GrammarRule[];
 
 type TokenType = "number" | "string" | "keyword" |
-    "left_brace" | "right_brace" | "left_bracket" | "right_bracket" |
-     "colon" | "comma" | "eof";
+    "{" | "}" | "[" | "]" |
+     ":" | "," | "eof";
 
 type Token = {
     type: TokenType,
@@ -47,7 +47,7 @@ const GRAMMAR: GrammarRule[] = [
     { lhs: "expr", rhs: ["null"], resolve: () => null },
     { lhs: "boolean", rhs: ["true"], resolve: () => true },
     { lhs: "boolean", rhs: ["false"], resolve: () => true },
-    { lhs: "object", rhs: ["left_brace", "object_entry_list", "right_brace"],
+    { lhs: "object", rhs: ["{", "object_entry_list", "}"],
         resolve: data => {
             const obj: any = {};
             for (const entry of data[1]) {
@@ -55,19 +55,19 @@ const GRAMMAR: GrammarRule[] = [
             }
             return obj;
         } },
-    { lhs: "object", rhs: ["left_brace", "right_brace"],
+    { lhs: "object", rhs: ["{", "}"],
         resolve: () => ({}) },
-    { lhs: "object_entry_list", rhs: ["object_entry", "comma", "object_entry_list"],
+    { lhs: "object_entry_list", rhs: ["object_entry", ",", "object_entry_list"],
         resolve: data => [data[0], ...data[2]] },
     { lhs: "object_entry_list", rhs: ["object_entry"],
         resolve: data => [data[0]] },
-    { lhs: "object_entry", rhs: ["string", "colon", "expr"],
+    { lhs: "object_entry", rhs: ["string", ":", "expr"],
         resolve: data => [unquote(data[0].text), data[2]] },
-    { lhs: "array", rhs: ["left_bracket", "array_items", "right_bracket"],
+    { lhs: "array", rhs: ["[", "array_items", "]"],
         resolve: data => data[1] },
-    { lhs: "array", rhs: ["left_bracket", "right_bracket"],
+    { lhs: "array", rhs: ["[", "]"],
         resolve: () => [] },
-    { lhs: "array_items", rhs: ["expr", "comma", "array_items"],
+    { lhs: "array_items", rhs: ["expr", ",", "array_items"],
         resolve: data => [data[0], ...data[2]] },
     { lhs: "array_items", rhs: ["expr"],
         resolve: data => [data[0]] }
@@ -75,7 +75,7 @@ const GRAMMAR: GrammarRule[] = [
 
 const TERMINALS = new Set([
     "number", "string", "true", "false", "null", 
-    "left_brace", "right_brace", "left_bracket", "right_bracket", "colon", "comma"
+    "{", "}", "[", "]", ":", ","
 ]);
 
 export function parse(input: string, debug: boolean = false): any {
@@ -87,7 +87,7 @@ export function parse(input: string, debug: boolean = false): any {
         dot: 0, origin: 0, data: []
     };
     const chart: Chart = [
-        { i: 0, states: { [stateKey(startState)]: startState } }
+        { i: 0, states: { [getStateKey(startState)]: startState } }
     ];
     let words: string[] = [];
     let i: number = 0;
@@ -132,34 +132,47 @@ export function parse(input: string, debug: boolean = false): any {
         i++;
         if (!chart[i]) {
             const lastStateSet = chart[i - 1];
-            displayError(lastStateSet, word);
+            displayError(lastStateSet, word, chart);
             throw new Error("Parse error.");
         }
     }
 
-    const startFinalStateKey = stateKey({
+    const startFinalStateKey = getStateKey({
         ...startState, 
         dot: startState.rule.rhs.length
     });
     const startFinalState = chart[i].states[startFinalStateKey];
     if (!startFinalState) {
         const lastStateSet = chart[i];
-        displayError(lastStateSet, { type: "eof", text: "end of input" });
+        displayError(lastStateSet, { type: "eof", text: "end of input" }, chart);
         throw new Error("Parse error.");
     } else {
         return startFinalState.data;
     }
 }
 
-function displayError(stateSet: StateSet, token: Token): void {
-    console.log(util.inspect(stateSet, { depth: 10 }));
-    displayStateSet(stateSet);
-    const intermediateRules = _.reverse(_.filter(stateSet.states, (state) => {
+function displayError(stateSet: StateSet, token: Token, chart: Chart): void {
+    // console.log(util.inspect(stateSet, { depth: 10 }));
+    for (let stateSet of chart) {
+        displayStateSet(stateSet);
+    }
+    const intermediateStates = _.reverse(_.filter(stateSet.states, (state) => {
         return isTerminal(nextSymbol(state));
     }));
-    const intermediateRuleKeys = _.map(intermediateRules, stateKey);
-    const expectedSymbols = _.map(intermediateRules, nextSymbol);
+    const intermediateRuleKeys = _.map(intermediateStates, getStateKey);
+    const expectedSymbols = _.map(intermediateStates, nextSymbol);
     console.log(`Unexpected ${formatToken(token)}. was expecting one of ${expectedSymbols.map(s => colors.bgGreen(s)).join(", ")}.`);
+    for (const intermediateState of intermediateStates) {
+        console.log();
+        console.log(`Traceback for ${getStateKey(intermediateState)}`);
+        console.log(`--------------------------------------`);
+        const lastStateKeys = Object.keys(stateSet.states);
+        const lastState = stateSet.states[lastStateKeys[lastStateKeys.length - 1]];
+        const stack = buildStateStack(intermediateState, chart);
+        for (const state of stack) {
+            console.log(getStateKey(state));
+        }
+    }
 }
 
 function formatToken(token: Token): string {
@@ -224,8 +237,16 @@ function incomplete(state: State): boolean {
     return state.dot < state.rule.rhs.length;
 }
 
+function notStarted(state: State): boolean {
+    return state.dot === 0;
+}
+
 function nextSymbol(state: State): string {
     return state.rule.rhs[state.dot];
+}
+
+function previousSymbol(state: State): string {
+    return state.rule.rhs[state.dot - 1];
 }
 
 function isNonTerminal(symbol: string): boolean {
@@ -237,17 +258,31 @@ function isTerminal(symbol: string): boolean {
 }
 
 function addToSet(state: State, chart: Chart, i: number): void {
-    const ruleKey = stateKey(state);
+    const ruleKey = getStateKey(state);
     if (!chart[i]) {
         chart[i] = { i, states: {} };
     }
     chart[i].states[ruleKey] = state;
 }
 
-function stateKey(state: State): string {
+function quoteIfTerminal(symbol: string): string {
+    if (isTerminal(symbol)) {
+        return `"${symbol}"`;
+    } else {
+        return symbol;
+    }
+}
+
+function getStateKey(state: State): string {
+    return "[" + state.origin + "] " + state.rule.lhs + " -> " + 
+        [...state.rule.rhs.map(quoteIfTerminal).slice(0, state.dot), 
+            "•",
+        ...state.rule.rhs.map(quoteIfTerminal).slice(state.dot)].join(" ");
+}
+
+function getStateKeyMinusDot(state: State): string {
     return state.rule.lhs + "->" + 
-        state.rule.rhs.slice(0, state.dot).join(" ") + "•" +
-        state.rule.rhs.slice(state.dot).join(" ") + ", " + state.origin;
+        state.rule.rhs.map(quoteIfTerminal).join(" ") + ", " + state.origin;
 }
 
 function unquote(string: string): string {
@@ -274,16 +309,104 @@ function displayChart(chart: Chart): void {
     });
 }
 
-// function buildStateStack(chart: Chart): State[] {
-//     const stack: State[] = [];
-//     let i = chart.length - 1;
-//     while (true) {
-//         const stateSet = chart[i];
-//         const keys = Object.keys(stateSet);
-//         for (let j = keys.length - 1; j >= 0; j--) {
-//             const state = stateSet[keys[j]];
+class Stack<T> {
+    array: T[] = [];
+    
+    push(item: T): void {
+        this.array.unshift(item);
+    }
 
-//         }
-//     }
-//     return stack;
-// }
+    top(): T | undefined {
+        return this.array[0];
+    }
+
+    empty(): boolean {
+        return this.array.length === 0;
+    }
+
+    pop(): T | undefined {
+        return this.array.shift();
+    }
+
+    asArray(): T[] {
+        return this.array;
+    }
+}
+
+function buildStateStack1(chart: Chart): State[] {
+    let stack: Stack<State> = new Stack();
+    
+    for (let i = chart.length - 1; i >= 0; i--) {
+        const stateSet = chart[i];
+        // console.log("chart ", i);
+        const stateKeys = Object.keys(stateSet.states);
+        for (let j = stateKeys.length - 1; j >= 0; j--) {
+            const stateKey = stateKeys[j];
+            // console.log("stateKey", stateKey);
+            const state = stateSet.states[stateKey];
+            const top = stack.top();
+            if (!top) {
+                stack.push(state);
+            } else {
+                const prev = previousSymbol(state);
+                // console.log("top", getStateKey(top), "prev", prev);
+                if (state.rule.lhs === previousSymbol(top)) {
+                    // console.log("Pushing", stateKey);
+                    stack.push(state);
+                } else {
+                    // console.log("Not pushing", stateKey);
+                }
+            }
+        }
+    }
+    
+    return stack.asArray();
+}
+
+function buildStateStack(state: State, chart: Chart): State[] {
+    // console.log("buildStateStack", getStateKey(state));
+    if (notStarted(state)) {
+        // traverse state keys backwards
+        // console.log("traverse state keys backwords");
+        let i = state.origin;
+        let stateSet = chart[i];
+        let stateKeys = Object.keys(stateSet.states);
+        let j = stateKeys.indexOf(getStateKey(state));
+        while (true) {
+            // console.log("i", i, "j", j);
+            j = j - 1;
+            if (j < 0) {
+                i = i - 1;
+                if (i < 0) {
+                    // console.log("reached the end");
+                    return [state];
+                }
+                stateSet = chart[i];
+                stateKeys = Object.keys(stateSet.states);
+                j = stateKeys.length - 1;
+            }
+
+            const prevState = stateSet.states[stateKeys[j]];
+            // console.log("prevState", getStateKey(prevState));
+            if (state.rule.lhs === nextSymbol(prevState)) {
+                // console.log("found previous matching state", getStateKey(prevState));
+                return [
+                    state,
+                    ...buildStateStack(prevState, chart)
+                ];
+            }
+        }
+    } else {
+        // find origin state
+        // console.log("find origin state");
+        const originStates = Object.values(chart[state.origin].states);
+        const originState = originStates
+            .filter((s) => 
+                getStateKeyMinusDot(state) === getStateKeyMinusDot(s))
+            [0];
+        return [
+            state, 
+            ...buildStateStack(originState, chart).slice(1)
+        ];
+    }
+}
