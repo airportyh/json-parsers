@@ -10,5 +10,9 @@ if (!filename) {
 
 const text = fs.readFileSync(filename) + "";
 
-const result = parse(text);
-console.log("result", result);
+try {
+    const result = parse(text);
+    console.log("result", result);
+} catch (e) {
+    console.log(e.message);
+}

@@ -1,6 +1,8 @@
 import * as _ from "lodash";
 import * as colors from "colors/safe";
 import * as util from "util";
+const rightPad = require("right-pad");
+
 const createLexer = require("../lexer/lexer");
 const indent = require("indent");
 
@@ -34,7 +36,10 @@ type TokenType = "number" | "string" | "keyword" |
 
 type Token = {
     type: TokenType,
-    text: string
+    text: string,
+    line: number,
+    col: number,
+    offset: number
 };
 
 const GRAMMAR: GrammarRule[] = [
@@ -61,8 +66,10 @@ const GRAMMAR: GrammarRule[] = [
         resolve: data => [data[0], ...data[2]] },
     { lhs: "object_entry_list", rhs: ["object_entry"],
         resolve: data => [data[0]] },
-    { lhs: "object_entry", rhs: ["string", ":", "expr"],
+    { lhs: "object_entry", rhs: ["object_entry_key", ":", "object_entry_value"],
         resolve: data => [unquote(data[0].text), data[2]] },
+    { lhs: "object_entry_key", rhs: ["string"] },
+    { lhs: "object_entry_value", rhs: ["expr"] },
     { lhs: "array", rhs: ["[", "array_items", "]"],
         resolve: data => data[1] },
     { lhs: "array", rhs: ["[", "]"],
@@ -132,7 +139,7 @@ export function parse(input: string, debug: boolean = false): any {
         i++;
         if (!chart[i]) {
             const lastStateSet = chart[i - 1];
-            displayError(lastStateSet, word, chart);
+            displayError(lastStateSet, word, chart, input);
             throw new Error("Parse error.");
         }
     }
@@ -144,28 +151,37 @@ export function parse(input: string, debug: boolean = false): any {
     const startFinalState = chart[i].states[startFinalStateKey];
     if (!startFinalState) {
         const lastStateSet = chart[i];
-        displayError(lastStateSet, { type: "eof", text: "end of input" }, chart);
+        displayError(lastStateSet, {
+            type: "eof", 
+            text: "end of input",
+            line: 0,
+            offset: 0,
+            col: 0
+        }, chart, input);
         throw new Error("Parse error.");
     } else {
         return startFinalState.data;
     }
 }
 
-function displayError(stateSet: StateSet, token: Token, chart: Chart): void {
+function displayError(stateSet: StateSet, token: Token, chart: Chart, input: string): void {
     // console.log(util.inspect(stateSet, { depth: 10 }));
-    for (let stateSet of chart) {
-        displayStateSet(stateSet);
-    }
+    // for (let stateSet of chart) {
+    //     displayStateSet(stateSet);
+    // }
     const intermediateStates = _.reverse(_.filter(stateSet.states, (state) => {
         return isTerminal(nextSymbol(state));
     }));
     const intermediateRuleKeys = _.map(intermediateStates, getStateKey);
     const expectedSymbols = _.map(intermediateStates, nextSymbol);
-    console.log(`Unexpected ${formatToken(token)}. was expecting one of ${expectedSymbols.map(s => colors.bgGreen(s)).join(", ")}.`);
+    // console.log(`Unexpected ${formatToken(token)}. was expecting one of ${expectedSymbols.map(s => colors.bgGreen(s)).join(", ")}.`);
+    console.log(`Unexpected ${formatToken(token)}:`)
+    displayErrorCode(token, input);
+    console.log(`I was expecting one of the following:`);
     for (const intermediateState of intermediateStates) {
         console.log();
-        console.log(`Traceback for ${getStateKey(intermediateState)}`);
-        console.log(`--------------------------------------`);
+
+        console.log(colors.bgGreen(nextSymbol(intermediateState)) + " from:");
         const lastStateKeys = Object.keys(stateSet.states);
         const lastState = stateSet.states[lastStateKeys[lastStateKeys.length - 1]];
         const stack = buildStateStack(intermediateState, chart);
@@ -175,13 +191,27 @@ function displayError(stateSet: StateSet, token: Token, chart: Chart): void {
     }
 }
 
+function displayErrorCode(token: Token, input: string): void {
+    const lines = input.split("\n");
+    const numberedLines = lines.slice(0, token.line).map((line, idx) => {
+        const num = idx + 1;
+        if (num === token.line) {
+            line = line.slice(0, token.col - 1) + colors.bgRed(token.text) + 
+                line.slice(token.col + token.text.length - 1);
+        }
+        return rightPad(String(num), 5, " ") + line;
+    });
+    console.log(numberedLines.join("\n"));
+    console.log(rightPad(" ", 4 + token.col, " ") + "^");
+}
+
 function formatToken(token: Token): string {
     if (token.type === "keyword") {
-        return colors.bgCyan(token.text);
+        return colors.bgRed(token.text);
     } else if (["number", "string"].indexOf(token.type) !== -1) {
-        return colors.bgCyan(colors.black(token.type) + " " + colors.red(token.text));
+        return token.type + " " + colors.bgRed(token.text);
     } else {
-        return colors.bgCyan(token.text);
+        return colors.bgRed(token.text);
     }
 }
 
