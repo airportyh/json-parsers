@@ -4,6 +4,7 @@
     * colorize and label sibling symbols
     * try rendering html for colorization so that we can use box model and hover states
     * provide/generate examples for each of the rules
+    * clean up error display code so that throwing an error makes sense
 * imagine the expected tokens and see which one yields a longer parse,
 then suggest the better one to the user
 * improve lexer error output
