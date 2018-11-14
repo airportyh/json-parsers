@@ -15,6 +15,7 @@ type State = {
 
 type StateSet = {
     i: number,
+    token: Token | null,
     states: {
         [key: string]: State
     }
@@ -94,18 +95,11 @@ export function parse(input: string, debug: boolean = false): any {
         dot: 0, origin: 0, data: []
     };
     const chart: Chart = [
-        { i: 0, states: { [getStateKey(startState)]: startState } }
+        { i: 0, states: { [getStateKey(startState)]: startState }, token: null }
     ];
-    let words: string[] = [];
     let i: number = 0;
     while (true) {
-        const word = lexer.next();
-        if (word) {
-            words.push(word.text);
-            if (debug) {
-                console.log(words.map((w) => colors.black(colors.bgCyan(w))).join(", "));
-            }
-        }
+        const token = lexer.next();
         let stateKeyIdx = 0;
         while (true) {
             const stateKeys = Object.keys(chart[i].states);
@@ -116,30 +110,30 @@ export function parse(input: string, debug: boolean = false): any {
             const state = chart[i].states[stateKey];
             if (incomplete(state)) {
                 if (isNonTerminal(nextSymbol(state))) {
-                    predictor(state, i, GRAMMAR, chart);
+                    predictor(state, i, token, GRAMMAR, chart);
                 } else {
-                    if (word !== undefined) {
-                        scanner(state, i, word, chart);
+                    if (token !== undefined) {
+                        scanner(state, i, token, chart);
                     }
                 }
             } else {
                 if (debug) {
                     console.log(colors.green(stateKey + " complete "));
                 }
-                completer(state, i, chart);
+                completer(state, i, token, chart);
             }
             stateKeyIdx++;
         }
         if (debug) {
             displayChart(chart);
         }
-        if (word === undefined) {
+        if (token === undefined) {
             break;
         }
         i++;
         if (!chart[i]) {
             const lastStateSet = chart[i - 1];
-            displayError(lastStateSet, word, chart, input);
+            displayError(lastStateSet, token, chart, input);
             throw new Error("Parse error.");
         }
     }
@@ -176,37 +170,87 @@ function displayError(stateSet: StateSet, token: Token, chart: Chart, input: str
     const expectedSymbols = _.map(intermediateStates, nextSymbol);
     // console.log(`Unexpected ${formatToken(token)}. was expecting one of ${expectedSymbols.map(s => colors.bgGreen(s)).join(", ")}.`);
     console.log(`Unexpected ${formatToken(token)}:`)
-    displayErrorCode(token, input);
     console.log(`I was expecting one of the following:`);
     for (const intermediateState of intermediateStates) {
         console.log();
 
-        console.log(colors.bgGreen(nextSymbol(intermediateState)) + " from:");
+        console.log(`a ${JSON.stringify(nextSymbol(intermediateState))} in place of a ${token.type} here:`);
         const lastStateKeys = Object.keys(stateSet.states);
         const lastState = stateSet.states[lastStateKeys[lastStateKeys.length - 1]];
         const stack = buildStateStack(intermediateState, chart);
-        for (const state of stack) {
-            console.log(getStateKey(state));
-        }
+        displayColoredSourceCode(token, input, stack, chart);
+        // for (const state of stack) {
+        //     console.log(getStateKey(state));
+        // }
+
     }
 }
 
-function displayErrorCode(token: Token, input: string): void {
-    const lines = input.split("\n");
+function displayColoredSourceCode(token: Token, input: string, stack: State[], chart: Chart): void {
+    const colorChoices = [
+        "bgYellow",
+        "bgGreen",
+        "bgCyan",
+        "bgMagenta",
+        "bgBlue"
+    ];
+    const coloredStateKeys: string[] = [];
+    const inputChars = input.split("");
+    const lastToken = chart[chart.length - 1].token;
+    if (!lastToken) {
+        throw new Error("Last token is not found.");
+    }
+    let lastColoredStateIndex: number = -1;
+    let colorCounter = -1;
+    for (let i = 0; i < stack.length; i++) {
+        const state = stack[i];
+        const stateIndex = state.origin + 1;
+        const currentToken = chart[stateIndex].token;
+        if (stateIndex !== lastColoredStateIndex && currentToken) {
+            colorCounter = colorCounter + 1;
+            const color = colorChoices[colorCounter % colorChoices.length];
+            const colorFn = (colors as any)[color];
+            coloredStateKeys.push(colorFn(getStateKey(state)));
+            const indexToReplace = currentToken.offset;
+            const charsToReplace = lastToken.offset + lastToken.text.length - currentToken.offset;
+            const thing = inputChars.slice(indexToReplace, lastToken.offset + lastToken.text.length).join("");
+            const replacement = colorFn(inputChars.slice(currentToken.offset, lastToken.offset + lastToken.text.length).join(""));
+            // console.log("replacing", colors.red(thing), "with", colors.green(replacement), charsToReplace, "chars");
+            inputChars[indexToReplace] = replacement;
+            for (let i = 1; i < charsToReplace; i++) {
+                inputChars[indexToReplace + i] = "";
+            }
+            lastColoredStateIndex = stateIndex;
+        } else {
+            const color = colorChoices[colorCounter % colorChoices.length];
+            const colorFn = (colors as any)[color];
+            coloredStateKeys.push(colorFn(getStateKey(state)));
+        }
+        
+    }
+    
+    const lines = inputChars.join("").split("\n");
     const numberedLines = lines.slice(0, token.line).map((line, idx) => {
         const num = idx + 1;
         if (num === token.line) {
-            line = line.slice(0, token.col - 1) + colors.bgRed(token.text) + 
+            line = line.slice(0, token.col - 1) + colors.red(token.text) + 
                 line.slice(token.col + token.text.length - 1);
         }
-        return rightPad(String(num), 5, " ") + line;
+        return colors.gray(rightPad(String(num), 5, " ")) + line;
     });
     console.log(numberedLines.join("\n"));
     console.log(rightPad(" ", 4 + token.col, " ") + "^");
+
+    console.log("from:")
+    for (let key of coloredStateKeys) {
+        console.log(key);
+    }
 }
 
-function formatToken(token: Token): string {
-    if (token.type === "keyword") {
+function formatToken(token: Token | null): string {
+    if (token === null) {
+        return "null";
+    } else if (token.type === "keyword") {
         return colors.bgRed(token.text);
     } else if (["number", "string"].indexOf(token.type) !== -1) {
         return token.type + " " + colors.bgRed(token.text);
@@ -215,11 +259,11 @@ function formatToken(token: Token): string {
     }
 }
 
-function predictor(state: State, j: number, grammar: Grammar, chart: Chart): void {
+function predictor(state: State, j: number, token: Token, grammar: Grammar, chart: Chart): void {
     const symbol = nextSymbol(state);
     for (const rule of grammar) {
         if (symbol === rule.lhs) {
-            addToSet({ rule, dot: 0, origin: j, data: [] }, chart, j);
+            addToSet({ rule, dot: 0, origin: j, data: [] }, chart, j, token);
         }
     }
 }
@@ -232,17 +276,17 @@ function tokenName(token: Token): string {
     }
 }
 
-function scanner(state: State, j: number, word: Token, chart: Chart): void {
-    if (tokenName(word) === nextSymbol(state)) {
+function scanner(state: State, j: number, token: Token, chart: Chart): void {
+    if (tokenName(token) === nextSymbol(state)) {
         addToSet({
             ...state, 
             dot: state.dot + 1, 
-            data: [...state.data, word]
-        }, chart, j + 1);
+            data: [...state.data, token]
+        }, chart, j + 1, token);
     }
 }
 
-function completer(state: State, k: number, chart: Chart): void {
+function completer(state: State, k: number, token: Token, chart: Chart): void {
     const { rule: { lhs: B, resolve } , origin: j } = state;
     if (resolve) {
         state.data = resolve(state.data);
@@ -258,7 +302,7 @@ function completer(state: State, k: number, chart: Chart): void {
                 ...parentState, 
                 dot: parentState.dot + 1,
                 data: [...parentState.data, state.data]
-            }, chart, k);
+            }, chart, k, token);
         }
     });
 }
@@ -287,10 +331,10 @@ function isTerminal(symbol: string): boolean {
     return TERMINALS.has(symbol);
 }
 
-function addToSet(state: State, chart: Chart, i: number): void {
+function addToSet(state: State, chart: Chart, i: number, token: Token): void {
     const ruleKey = getStateKey(state);
     if (!chart[i]) {
-        chart[i] = { i, states: {} };
+        chart[i] = { i, states: {}, token };
     }
     chart[i].states[ruleKey] = state;
 }
@@ -320,7 +364,7 @@ function unquote(string: string): string {
 }
 
 function displayStateSet(stateSet: StateSet): void {
-    console.log(`S${stateSet.i}:`);
+    console.log(`S${stateSet.i}: ${formatToken(stateSet.token)}`);
     const displayStrings = _.map(stateSet.states, (state, stateKey) => {
         if (state.dot === 0) {
             return colors.gray(stateKey);

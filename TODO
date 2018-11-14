@@ -1,9 +1,9 @@
 ## Error Message Strategies
 
 * think of ways to provide the context in a more user-friendly way
-    * provide/generate examples for each of the rules
-    * colorize/visually link each state to the token(s) they are related to
     * colorize and label sibling symbols
+    * try rendering html for colorization so that we can use box model and hover states
+    * provide/generate examples for each of the rules
 * imagine the expected tokens and see which one yields a longer parse,
 then suggest the better one to the user
 * improve lexer error output
